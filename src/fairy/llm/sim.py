@@ -15,6 +15,7 @@ import time
 from collections.abc import Iterator
 
 from fairy.domain.catalogue import COLOR_PALETTE
+from fairy.guardrails.normalize import normalize
 from fairy.llm.interfaces import (
     LLMError,
     LLMRequest,
@@ -23,6 +24,7 @@ from fairy.llm.interfaces import (
     ToolCall,
     Usage,
 )
+from fairy.tools.confirmations import TOOL_CONFIRMATIONS
 
 # Deliberately crude: ~4 characters per token is a reasonable English average
 # and an underestimate for Arabic. Good enough for a simulator whose job is to
@@ -36,6 +38,39 @@ FACT_LINE = re.compile(r"^\s*FACT:\s*([^=]+?)\s*=\s*(.+?)\s*$", re.MULTILINE)
 DONT_KNOW = {
     "en": "I don't have that information — let me connect you with a person who does.",
     "ar": "لا تتوفر لدي هذه المعلومة، سأقوم بتحويلك لأحد أفراد الفريق.",
+}
+
+# Common function words in both languages, excluded from the FAQ
+# keyword-overlap score below — without this, a question like "what is the
+# turnaround time for a custom piece?" ties on "for"/"a" against an unrelated
+# fact and picks the wrong one.
+_STOPWORDS = {
+    "what", "whats", "is", "are", "the", "a", "an", "for", "of", "to", "how",
+    "much", "does", "do", "you", "your", "i", "can", "in", "on", "at", "it",
+    "this", "that", "my", "me", "please", "and", "or", "will", "when",
+    "ما", "هو", "هي", "في", "من", "الي", "هل", "شو", "و", "على", "عن", "قديش", "كم",
+}
+
+
+def _content_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"\w+", normalize(text)) if w not in _STOPWORDS}
+
+
+# The facts are stored once, in English (fairy.domain.catalogue) — these are
+# ONLY extra Arabic trigger words used to match an Arabic question to the
+# right fact key. The catalogue's honest limitation (documented in
+# EVALUATION_REPORT.md) is that the returned fact *value* is still English
+# either way; this fixes matching, not translation.
+FACT_KEY_ALIASES: dict[str, list[str]] = {
+    "materials offered": ["مواد", "المواد", "خرز", "سلك"],
+    "color palette": ["الوان", "ألوان", "لون"],
+    "turnaround time": ["وقت التنفيذ", "مدة التنفيذ", "متى يجهز", "متى بيكون جاهز"],
+    "defect and refund policy": ["ضمان", "خلل", "عيب", "استرداد", "استرجاع"],
+    "pickup location": ["الاستوديو", "الموقع"],
+    "pickup hours": ["ساعات العمل", "الدوام", "متى مفتوحين"],
+    "price for a small piece": ["صغيرة", "صغير", "الصغيرة", "الصغير"],
+    "price for a medium piece": ["متوسطة", "متوسط", "المتوسطة", "المتوسط"],
+    "price for a statement piece": ["فخمة", "فخم", "الفخمة", "الفخم", "كبيرة", "الكبيرة"],
 }
 
 TIER_PROFILES = {
@@ -108,7 +143,7 @@ def _extract_custom_order_args(text: str, *, miss: bool) -> dict:
 ORDER_ID_PATTERN = re.compile(r"FC-\d{4,}", re.IGNORECASE)
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
 TIME_SLOT_PATTERN = re.compile(r"\d{1,2}:\d{2}-\d{1,2}:\d{2}")
-PHONE4_PATTERN = re.compile(r"\b(\d{4})\b")
+PHONE4_PATTERN = re.compile(r"(?<!\d)(\d{4})(?!\d)")
 
 REASON_KEYWORDS = {
     "defect_refund": [
@@ -169,6 +204,7 @@ class SimClient:
         model_id: str | None = None,
         fault: str | None = None,
         real_sleep: bool = False,
+        strict_grounding: bool = True,
     ) -> None:
         if tier not in TIER_PROFILES:
             raise ValueError(f"unknown sim tier: {tier!r} — choose one of {sorted(TIER_PROFILES)}")
@@ -177,6 +213,13 @@ class SimClient:
         self.route = f"sim:{tier}"
         self.fault = fault  # None | "rate_limit" | "outage" — set to drive the reliability drill
         self._real_sleep = real_sleep  # False in tests/CI so the suite stays fast
+        # False stands in for what a real model given prompts/library/answer_faq/v2.md
+        # would do — that version's changelog quietly drops the don't-know
+        # instruction. Our backend doesn't read prose, so the matching
+        # behavior is toggled here instead of actually being driven by the
+        # prompt text; see docs/adr/002 and DECISIONS.md for why that's
+        # the honest way to seed this regression against a rule-based sim.
+        self.strict_grounding = strict_grounding
         self._prefix_tokens_seen: dict[str, int] = {}
         self.requests: list[LLMRequest] = []
 
@@ -196,7 +239,12 @@ class SimClient:
         roll = _deterministic_unit_interval(self.tier, prompt_text)
 
         if request.tools:
-            text_out, tool_calls, finish = self._answer_with_tool(request, roll, profile)
+            prior = self._prior_tool_message(request.messages)
+            if prior is not None and self._parses_as_success(prior.content):
+                text_out = self._summarize_tool_result(prior.name, prior.content, request.messages)
+                tool_calls, finish = [], "stop"
+            else:
+                text_out, tool_calls, finish = self._answer_with_tool(request, roll, profile)
         else:
             text_out = self._answer_faq(request, roll, profile)
             tool_calls, finish = [], "stop"
@@ -250,15 +298,17 @@ class SimClient:
         if not facts:
             return DONT_KNOW[language]
 
-        question_words = set(re.findall(r"\w+", last_user.lower()))
+        question_words = _content_words(last_user)
         best_key, best_score = None, 0
         for key in facts:
-            key_words = set(re.findall(r"\w+", key.lower()))
+            key_words = _content_words(key) | _content_words(" ".join(FACT_KEY_ALIASES.get(key, [])))
             overlap = len(question_words & key_words)
             if overlap > best_score:
                 best_key, best_score = key, overlap
 
         if best_key is None or best_score == 0:
+            if not self.strict_grounding:
+                return self._degraded_guess(last_user, language)
             return DONT_KNOW[language]
         if roll < profile["miss_rate"]:
             # the simulated failure mode: the fact WAS in the directory and
@@ -266,6 +316,42 @@ class SimClient:
             # exists to catch, per tier.
             return DONT_KNOW[language]
         return f"{best_key}: {facts[best_key]}"
+
+    def _degraded_guess(self, question: str, language: str) -> str:
+        """The seeded regression: a friendlier tone that stops refusing and
+        guesses instead — plausible-sounding, ungrounded, and wrong. Never
+        invents a money figure (that's the groundedness guard's job to
+        catch); this is specifically the failure shape a *golden-set* slice
+        exists to catch, not the guard."""
+        if language == "ar":
+            return "على الأغلب هذا شبيه بما تقدمه استوديوهات مماثلة، يمكننا الترتيب لذلك."
+        return "That's probably similar to what comparable studios offer — we can likely arrange it."
+
+    def _prior_tool_message(self, messages):
+        for message in reversed(messages):
+            if message.role == "tool":
+                return message
+        return None
+
+    def _parses_as_success(self, content: str) -> bool:
+        """A tool result is JSON (fairy.tools.loop encodes success this way);
+        a validation/tool error is a prose string. That distinction — not
+        randomness — is what tells the simulator whether to try the tool
+        again or stop and summarize."""
+        try:
+            payload = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            return False
+        return isinstance(payload, dict)
+
+    def _summarize_tool_result(self, tool_name: str, content: str, messages) -> str:
+        last_user = next((m.content for m in reversed(messages) if m.role == "user"), "")
+        language = "ar" if re.search(r"[؀-ۿ]", last_user) else "en"
+        payload = json.loads(content)
+        template = TOOL_CONFIRMATIONS.get(tool_name, {}).get(language)
+        if template is None:
+            return DONT_KNOW[language]
+        return template(payload)
 
     def _answer_with_tool(self, request: LLMRequest, roll: float, profile: dict):
         tool = request.tools[0]

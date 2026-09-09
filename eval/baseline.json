@@ -1,0 +1,22 @@
+{
+  "difficulty": {
+    "easy": 1.0,
+    "hard": 1.0,
+    "medium": 1.0
+  },
+  "intent": {
+    "appointment": 1.0,
+    "escalation": 1.0,
+    "faq": 1.0,
+    "new_order": 1.0,
+    "order_status": 1.0
+  },
+  "language": {
+    "ar": 1.0,
+    "en": 1.0
+  },
+  "risk": {
+    "adversarial": 1.0,
+    "benign": 1.0
+  }
+}

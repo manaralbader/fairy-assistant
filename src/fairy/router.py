@@ -13,11 +13,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import json
+
 from fairy.domain.catalogue import facts_dict, to_fact_lines
 from fairy.guardrails.normalize import detect_language
 from fairy.guardrails.pipeline import check_input, check_output
 from fairy.llm.interfaces import LLMClient, LLMRequest, Message
 from fairy.prompts.registry import load_prompt
+from fairy.tools.confirmations import TOOL_CONFIRMATIONS
 from fairy.tools.loop import run_tool_loop
 from fairy.tools.registry import TOOLS
 from fairy.tools.session import Session
@@ -70,9 +73,27 @@ def _run_single_tool_workflow(
         session=session,
         store=store,
         tools=[TOOLS[tool_name].json_schema],
-        max_iterations=2,
+        # room for: a fumble on attempt 1, a successful retry, and a turn to
+        # compose the confirmation the customer actually sees.
+        max_iterations=3,
     )
-    return result.final_text or "", result.log
+    final_text = result.final_text or ""
+
+    # A terminal tool (escalate_to_human) ends the loop the instant it
+    # succeeds — no backend, real or simulated, ever gets a turn to compose
+    # a summary for it, so the router composes one here instead of showing
+    # the tool's raw JSON result directly.
+    if result.log and result.log[-1].get("outcome") == "ok":
+        try:
+            payload = json.loads(final_text)
+        except (json.JSONDecodeError, TypeError):
+            payload = None
+        if isinstance(payload, dict):
+            template = TOOL_CONFIRMATIONS.get(tool_name, {}).get(detect_language(user_text))
+            if template is not None:
+                final_text = template(payload)
+
+    return final_text, result.log
 
 
 def handle_turn(

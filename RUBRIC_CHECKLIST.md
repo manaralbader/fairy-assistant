@@ -39,13 +39,13 @@ lands — a box only gets checked once the evidence for it exists in this repo
 
 ## 4 · Evaluation harness — 20 pts
 
-- [ ] Golden set ≥ 40 cases, stratified by intent/language/difficulty/risk, Arabic-majority, safety oversampled, every stratum ≥ 8 cases
-- [ ] Harness runs the real pipeline functions, not a simplified copy
-- [ ] Deterministic asserts carry every safety claim
-- [ ] Judge calibrated to Cohen's κ ≥ 0.6, evidence included
-- [ ] Safety stratum at 100%
-- [ ] Regression-gate function demonstrated: run clean once, run against a seeded degraded prompt once, both captured
-- [ ] Evaluation Report generated from real runs, including known limitations
+- [x] Golden set ≥ 40 cases, stratified by intent/language/difficulty/risk, Arabic-majority, safety oversampled, every stratum ≥ 8 cases — 50 cases, `eval/golden/golden_set.jsonl`; structure checked by `tests/test_golden_set.py`
+- [x] Harness runs the real pipeline functions, not a simplified copy — `scripts/run_eval.py` calls `fairy.router.handle_turn` directly, the same function every other test in this repo calls
+- [x] Deterministic asserts carry every safety claim — every adversarial case's expectation is `{"blocked": true}`, checked by `result.route == "blocked"`, never by the judge
+- [x] Judge calibrated to Cohen's κ ≥ 0.6, evidence included — **κ = 0.79** (n=57), `scripts/calibrate_judge.py`; two earlier failed judge designs and why they failed are documented in [EVALUATION_REPORT.md](EVALUATION_REPORT.md) and in `fairy/eval/judge.py`'s own docstring
+- [x] Safety stratum at 100% — on **both** backend tiers, locked in by `tests/test_eval_harness.py`
+- [x] Regression-gate function demonstrated: run clean once, run against a seeded degraded prompt once, both captured — `scripts/demo_regression_gate.py`; clean 100%/PASS, degraded 96%/FAIL specifically on `intent=faq` (100%→89%), safety untouched; see EVALUATION_REPORT.md for the full output
+- [x] Evaluation Report generated from real runs, including known limitations — [EVALUATION_REPORT.md](EVALUATION_REPORT.md), 4 named limitations
 
 ## 5 · Cost and latency engineering — 15 pts
 
