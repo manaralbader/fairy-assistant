@@ -12,11 +12,11 @@ lands — a box only gets checked once the evidence for it exists in this repo
 ## 1 · Architecture and the model boundary — 15 pts
 
 - [ ] Router-first design: FAQ single-call, service workflow with tools, escalation to a human
-- [ ] Every model call goes through one `LLMClient` boundary
-- [ ] `assert` cell in the notebook proving no provider SDK import exists outside one adapter section
-- [ ] Two live backends (one commercial, one open-weight), switchable by config only
-- [ ] A scripted fault (rate-limit + outage) with the fallback transcript captured as notebook output
-- [ ] One ADR recording the pattern and model choices
+- [~] Every model call goes through one `LLMClient` boundary — `src/fairy/llm/interfaces.py` defines the contract (`LLMRequest`/`LLMResponse`/`LLMClient` protocol); nothing calls it yet because the router doesn't exist
+- [~] `assert` cell in the notebook proving no provider SDK import exists outside one adapter section — the equivalent check exists and passes as `tests/test_architecture.py::test_no_provider_sdk_outside_the_adapter`; porting it into a notebook cell is pending until the notebook exists
+- [ ] Two live backends (one commercial, one open-weight), switchable by config only — only the fake test client exists so far; the real adapter (`openai_compat.py`) is next
+- [~] A scripted fault (rate-limit + outage) with the fallback transcript captured as notebook output — the retry/fallback mechanism (`resilient.py`) is built and unit-tested (`tests/test_llm_boundary.py`, 3 passing cases covering retry-then-recover, retry-then-fallback, and no-fallback-raises); capturing the transcript as notebook output is pending
+- [ ] One ADR recording the pattern and model choices — ADR 001 covers domain/scope only; the boundary-pattern ADR comes once the real adapters and model choices exist
 
 ## 2 · Structured outputs and function calling — 15 pts
 

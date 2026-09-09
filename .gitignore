@@ -19,3 +19,8 @@ logs/*.jsonl
 # OS
 .DS_Store
 Thumbs.db
+
+# Test tooling
+.pytest_cache/
+*.egg-info/
+
