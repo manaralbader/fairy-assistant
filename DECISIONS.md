@@ -9,6 +9,19 @@ change our mind about?
 | [001](docs/adr/001-domain-and-scope.md) | Domain and scope: Fairycore, a custom-jewelry commission assistant | proposed |
 | [002](docs/adr/002-the-default-backend.md) | The default backend is a simulator, and every artefact says so | accepted |
 
+## Routing recommendation (Module 6)
+
+Route FAQ and read-only traffic to the open-weight tier by default; escalate
+to commercial only where the guard's groundedness check fires (see
+`fairy.guardrails.pipeline.check_output`). Evidence: both tiers score 100%
+on the golden set's safety stratum and 100%/94%+ on quality slices
+(BENCHMARKS.md), the open-weight tier is ~5x cheaper per conversation and
+~2x lower latency at measured throughput, and self-hosting clears its
+break-even well below the throughput actually measured for this tier. If
+real traffic ever pushed the open-weight tier's benign pass rate below the
+committed baseline, the regression gate (`scripts/demo_regression_gate.py`)
+is what would catch it — not a manual spot-check.
+
 ## Trade-offs we reversed
 
 ### `create_custom_order` asking for a phone number, reversed

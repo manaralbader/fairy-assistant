@@ -103,12 +103,24 @@ def handle_turn(
     session: Session,
     store: OrderStore,
     max_tokens: int = 300,
+    response_cache=None,
 ) -> RouterResult:
     blocked = check_input(user_text)
     if blocked is not None:
         return RouterResult(route="blocked", final_text=blocked.output_text, guard_stages=blocked.stages)
 
     language = detect_language(user_text)
+
+    is_tool_intent = (
+        _any_keyword(user_text, _ESCALATION_KEYWORDS)
+        or _any_keyword(user_text, _ORDER_STATUS_KEYWORDS)
+        or _any_keyword(user_text, _APPOINTMENT_KEYWORDS)
+        or _any_keyword(user_text, _NEW_ORDER_KEYWORDS)
+    )
+    if not is_tool_intent and response_cache is not None:
+        cached = response_cache.get(user_text, language)
+        if cached is not None:
+            return RouterResult(route="faq", final_text=cached, guard_stages=[], tool_log=[])
 
     if _any_keyword(user_text, _ESCALATION_KEYWORDS):
         raw_text, tool_log = _run_single_tool_workflow(
@@ -139,9 +151,12 @@ def handle_turn(
                     Message(role="user", content=user_text),
                 ],
                 max_tokens=max_tokens,
+                cache_prefix_messages=1,  # the system prompt is the stable, cacheable prefix
             )
         )
         raw_text, tool_log, route = response.text or "", [], "faq"
 
     guarded = check_output(raw_text, facts=facts_dict(), language=language)
+    if route == "faq" and response_cache is not None and guarded.verdict == "allow":
+        response_cache.set(user_text, language, guarded.output_text)
     return RouterResult(route=route, final_text=guarded.output_text, guard_stages=guarded.stages, tool_log=tool_log)
