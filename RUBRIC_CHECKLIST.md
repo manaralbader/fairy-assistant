@@ -30,12 +30,12 @@ lands — a box only gets checked once the evidence for it exists in this repo
 
 ## 3 · Prompt pipeline and guardrails — 15 pts
 
-- [ ] Every prompt is a versioned file with a changelog, zero inline prompt text in Python
-- [ ] Five-stage guardrail pipeline, each stage demonstrated alone
-- [ ] Attack corpus ≥ 30 cases, bilingual
-- [ ] ≥ 95% blocked, **reported next to** 0% false positives on a same-size legitimate corpus (both numbers, always paired)
-- [ ] Patterns matched against normalized text (handles zero-width separators, Arabic normalization)
-- [ ] Canary intact; refusals bilingual and never echo the payload
+- [x] Every prompt is a versioned file with a changelog, zero inline prompt text in Python — `prompts/library/answer_faq/v1.md` + `prompts/registry.py`; `test_no_inline_prompt_text_in_code` and `test_every_prompt_has_a_changelog` pass
+- [~] Five-stage guardrail pipeline, each stage demonstrated alone — all 5 (`normalize`, `detect_injection`, `check_canary_leak`, `check_groundedness`, `compose_refusal`) are standalone functions, each directly unit-tested; porting the demonstration into notebook cells is pending until the notebook exists
+- [x] Attack corpus ≥ 30 cases, bilingual — 32 cases (16 en / 16 ar), `eval/guard/attack_corpus.jsonl`, includes a zero-width-obfuscated override and an Arabic authority-claim override as the two deliberately hard cases
+- [x] ≥ 95% blocked, **reported next to** 0% false positives on a same-size legitimate corpus (both numbers, always paired) — **measured 100% block rate / 0% false-positive rate** on 32 attack + 32 legit cases (legit corpus has deliberate traps: trigger words like "ignore," "restrictions," "developer" reused in ordinary sentences), via `scripts/run_guard_eval.py`; locked in by `tests/test_guard_eval.py` so a regression fails the build, not just a future manual re-check
+- [x] Patterns matched against normalized text (handles zero-width separators, Arabic normalization) — `guardrails/normalize.py` runs before `detect_injection` unconditionally; both hard cases have a dedicated passing test
+- [x] Canary intact; refusals bilingual and never echo the payload — `guardrails/canary.py` + `guardrails/refusal.py`; refusal text is a fixed lookup table, never built from request text
 
 ## 4 · Evaluation harness — 20 pts
 
