@@ -6,7 +6,7 @@ built as the capstone project for **SDA-AIE-213 — LLM Application Engineering*
 
 **Programme:** LLM Application Engineering, cohort 6–9 September 2026.
 
-**Author:** TODO — full name (submissions without a name are not graded)
+**Author:** Manar Albader
 
 ## What this is
 
