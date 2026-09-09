@@ -11,11 +11,13 @@
 | commercial | 100% | $0.000030 | 338.9ms | 10,623 req/hr |
 | open_weight | 100% | $0.000006 | 166.0ms | 21,689 req/hr |
 
-**Self-host break-even:** at a $0.50/hr fixed self-hosting cost, the
-open-weight tier pays for itself above ~16,545 conversations/hour, against
-measured throughput of ~21,689 req/hr at this tier's latency — i.e. it clears
-break-even under the load this tier was actually measured at. Recorded in
-[DECISIONS.md](DECISIONS.md).
+**Self-host break-even, both sides:** at a $0.50/hr fixed self-hosting cost
+and the commercial tier's measured $0.000030/conversation, self-hosting only
+pays for itself above ~16,545 conversations/hour — **below that volume, the
+commercial pay-per-token API is cheaper**, because the fixed hourly cost
+runs whether or not it's used. Measured open-weight throughput at this
+tier's latency (~21,689 req/hr) clears that bar, but a lower-traffic
+deployment would not. Recorded in [DECISIONS.md](DECISIONS.md).
 
 ## Module 3 — structured-output pass rates (`scripts/measure_tool_extraction.py`)
 

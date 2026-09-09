@@ -68,12 +68,13 @@ def main() -> None:
         )
 
     print(
-        f"\nself-host break-even: at ${FIXED_SELF_HOST_COST_PER_HOUR_USD:.2f}/hr fixed cost, "
-        f"self-hosting the open-weight tier pays for itself above "
-        f"{be['break_even_requests_per_hour']:.0f} conversations/hour "
-        f"(commercial-tier cost/conversation: ${commercial['cost_per_conversation_usd']:.6f}); "
-        f"measured open-weight throughput at this tier's simulated latency: "
-        f"{open_weight['requests_per_hour']:.0f} req/hr."
+        f"\nself-host break-even, both sides: at ${FIXED_SELF_HOST_COST_PER_HOUR_USD:.2f}/hr fixed cost "
+        f"and a commercial-tier cost of ${commercial['cost_per_conversation_usd']:.6f}/conversation, "
+        f"self-hosting only pays for itself above {be['break_even_requests_per_hour']:.0f} conversations/hour — "
+        f"BELOW that volume the commercial pay-per-token API is cheaper, since the fixed hourly "
+        f"cost runs whether or not it's used. Measured open-weight throughput at this tier's "
+        f"latency ({open_weight['requests_per_hour']:.0f} req/hr) clears that bar; a lower-traffic "
+        f"deployment would not."
     )
 
 

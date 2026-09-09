@@ -16,9 +16,15 @@ to commercial only where the guard's groundedness check fires (see
 `fairy.guardrails.pipeline.check_output`). Evidence: both tiers score 100%
 on the golden set's safety stratum and 100%/94%+ on quality slices
 (BENCHMARKS.md), the open-weight tier is ~5x cheaper per conversation and
-~2x lower latency at measured throughput, and self-hosting clears its
-break-even well below the throughput actually measured for this tier. If
-real traffic ever pushed the open-weight tier's benign pass rate below the
+~2x lower latency at measured throughput.
+
+This recommendation is volume-conditional, not absolute: self-hosting only
+clears break-even above ~16,545 conversations/hour at a $0.50/hr fixed
+cost. Measured open-weight throughput (~21,689 req/hr) clears that bar, so
+the recommendation holds at the traffic level actually measured — but a
+lower-volume deployment should stay on the commercial pay-per-token tier,
+where the fixed hourly cost isn't paid whether or not it's used. If real
+traffic ever pushed the open-weight tier's benign pass rate below the
 committed baseline, the regression gate (`scripts/demo_regression_gate.py`)
 is what would catch it — not a manual spot-check.
 
