@@ -4,8 +4,7 @@ A bilingual (Arabic-majority, English-supported) customer assistant for
 **Fairycore**, a fictional handmade-jewelry commission studio in Riyadh, KSA —
 built as the capstone project for **SDA-AIE-213 — LLM Application Engineering**.
 
-> TODO: programme name + cohort dates — e.g. "SDAIA Academy, SDA-AIE-213, cohort
-> <dates>". Fill in before submission.
+**Programme:** LLM Application Engineering, cohort 6–9 September 2026.
 
 **Author:** TODO — full name (submissions without a name are not graded)
 
