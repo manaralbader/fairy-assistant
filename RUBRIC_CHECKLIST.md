@@ -12,11 +12,11 @@ lands — a box only gets checked once the evidence for it exists in this repo
 ## 1 · Architecture and the model boundary — 15 pts
 
 - [ ] Router-first design: FAQ single-call, service workflow with tools, escalation to a human
-- [~] Every model call goes through one `LLMClient` boundary — `src/fairy/llm/interfaces.py` defines the contract (`LLMRequest`/`LLMResponse`/`LLMClient` protocol); nothing calls it yet because the router doesn't exist
-- [~] `assert` cell in the notebook proving no provider SDK import exists outside one adapter section — the equivalent check exists and passes as `tests/test_architecture.py::test_no_provider_sdk_outside_the_adapter`; porting it into a notebook cell is pending until the notebook exists
-- [ ] Two live backends (one commercial, one open-weight), switchable by config only — only the fake test client exists so far; the real adapter (`openai_compat.py`) is next
-- [~] A scripted fault (rate-limit + outage) with the fallback transcript captured as notebook output — the retry/fallback mechanism (`resilient.py`) is built and unit-tested (`tests/test_llm_boundary.py`, 3 passing cases covering retry-then-recover, retry-then-fallback, and no-fallback-raises); capturing the transcript as notebook output is pending
-- [ ] One ADR recording the pattern and model choices — ADR 001 covers domain/scope only; the boundary-pattern ADR comes once the real adapters and model choices exist
+- [~] Every model call goes through one `LLMClient` boundary — the contract (`interfaces.py`) and two implementations (`sim.py`, `openai_compat.py`) exist; nothing calls it yet because the router doesn't exist
+- [~] `assert` cell in the notebook proving no provider SDK import exists outside one adapter section — proven locally as `tests/test_architecture.py::test_no_provider_sdk_outside_the_adapter`; porting it into a notebook cell is pending until the notebook exists
+- [~] Two live backends (one commercial, one open-weight), switchable by config only — **by design decision (ADR 002), the default and graded run uses a rule-based simulator with two distinct tiers, not real network calls** (no cost, no key, reproducible). The real adapter (`openai_compat.py`) is fully implemented and unit-tested against a mocked HTTP layer, and `config.py` proves route selection is env-var-only (`tests/test_config.py`) — so the *architecture* claim is proven; it is not claiming two real providers were exercised live
+- [~] A scripted fault (rate-limit + outage) with the fallback transcript captured as notebook output — the retry/fallback mechanism (`resilient.py`) is built and unit-tested (3 passing cases: retry-then-recover, retry-then-fallback, no-fallback-raises); capturing the transcript as notebook output is pending
+- [x] One ADR recording the pattern and model choices — [ADR 001](docs/adr/001-domain-and-scope.md) (domain/scope) and [ADR 002](docs/adr/002-the-default-backend.md) (why the default backend is a simulator, what stays real, what's simulated); concrete model choices recorded in `.env.example`
 
 ## 2 · Structured outputs and function calling — 15 pts
 

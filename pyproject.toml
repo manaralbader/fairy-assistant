@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "python-dotenv>=1"]
 real-backend = ["openai>=1"]
 
 [tool.pytest.ini_options]

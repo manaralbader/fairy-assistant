@@ -7,6 +7,7 @@ change our mind about?
 | ADR | Decision | Status |
 |---|---|---|
 | [001](docs/adr/001-domain-and-scope.md) | Domain and scope: Fairycore, a custom-jewelry commission assistant | proposed |
+| [002](docs/adr/002-the-default-backend.md) | The default backend is a simulator, and every artefact says so | accepted |
 
 ## Trade-offs we reversed
 
