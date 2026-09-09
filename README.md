@@ -22,15 +22,18 @@ The decision log is [`DECISIONS.md`](DECISIONS.md).
 
 ## How to open and run it
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/manaralbader/fairy-assistant/blob/main/notebooks/capstone.ipynb)
+
 The whole submission is **one Colab notebook** —
 [`notebooks/capstone.ipynb`](notebooks/capstone.ipynb) — with no setup required:
 
-1. Open the notebook in Google Colab (badge/link goes here once the notebook exists).
+1. Click the badge above (or open the notebook in Colab directly).
 2. **Runtime → Run all.**
 3. By default it runs against a built-in local simulator (no API key, no
    network) so a stranger can run the whole thing with nothing else installed.
-   Optionally, set `OPENAI_API_KEY` / another provider key as a Colab secret to
-   switch the same code onto a real backend — see the setup cell.
+   Optionally, add real keys per [`.env.example`](.env.example) to switch the
+   same code onto a real backend (Google Gemini / Groq, both free-tier,
+   neither requires a card) — no code change, see `fairy/llm/config.py`.
 
 ## Repository layout
 
@@ -44,7 +47,13 @@ docs/adr/     architecture decision records
 tests/        architecture and unit tests, runnable locally and inline in the notebook
 ```
 
-## Status
+## Results
 
-Work in progress — this README will grow a results summary, benchmarks table,
-and evaluation report links as each module's discipline is built and evidenced.
+- **Evaluation:** 50-case golden set, 100% (commercial) / 98% (open-weight),
+  safety stratum 100% on both — [`EVALUATION_REPORT.md`](EVALUATION_REPORT.md)
+- **Benchmarks:** guard rate, tool pass rates, cost before/after —
+  [`BENCHMARKS.md`](BENCHMARKS.md)
+- **Decisions:** architecture, model/routing choice, one reversed trade-off —
+  [`DECISIONS.md`](DECISIONS.md)
+
+No extension attempted — mandatory scope only.
