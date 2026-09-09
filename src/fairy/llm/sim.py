@@ -9,12 +9,13 @@ Nothing here imports a provider SDK; it doesn't need to.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import time
 from collections.abc import Iterator
 
+from fairy.domain.catalogue import COLOR_PALETTE
 from fairy.llm.interfaces import (
-    LLMClient,
     LLMError,
     LLMRequest,
     LLMResponse,
@@ -49,6 +50,59 @@ TIER_PROFILES = {
 def _deterministic_unit_interval(*parts: str) -> float:
     digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
     return (int(digest[:8], 16) % 10_000) / 10_000
+
+
+# A crude bilingual keyword extractor for create_custom_order — real code, not
+# a live model, which is why answer *quality* is the one thing ADR 002 asks a
+# reader not to trust from this file. It's what makes the validate → retry →
+# repair loop's pass rate genuinely measurable per language rather than
+# fabricated: the schema either validates what this actually extracted, or it
+# doesn't.
+AR_COLOR_MAP = {
+    "لافندر": "lavender",
+    "وردي": "blush pink",
+    "زهري": "blush pink",
+    "كريمي": "cream",
+    "ذهبي": "gold",
+    "فضي": "silver",
+    "سماوي": "sky blue",
+    "أرجواني": "lilac",
+    "بنفسجي": "lilac",
+}
+
+BUDGET_KEYWORDS = {
+    "small": ["bracelet", "earring", "earrings", "سوار", "أقراط"],
+    "medium": ["necklace", "layered", "set", "قلادة", "طقم"],
+    "statement": ["statement", "large", "multi-strand", "فخم", "كبير"],
+}
+
+
+def _extract_custom_order_args(text: str, *, miss: bool) -> dict:
+    lowered = text.lower()
+    colors = [c for c in COLOR_PALETTE if c in lowered]
+    for arabic_word, mapped in AR_COLOR_MAP.items():
+        if arabic_word in text and mapped not in colors:
+            colors.append(mapped)
+    if not colors:
+        colors = ["gold"]
+    colors = colors[:2]
+
+    budget_tier = "small"
+    for tier, keywords in BUDGET_KEYWORDS.items():
+        if any(keyword in lowered or keyword in text for keyword in keywords):
+            budget_tier = tier
+            break
+
+    args = {
+        "color_preference": colors,
+        "budget_tier": budget_tier,
+        "inspiration_note": text.strip(),
+    }
+    if miss:
+        # a real extraction failure mode: a required field goes missing
+        # entirely, the same way a model sometimes forgets to fill one in.
+        args.pop("budget_tier")
+    return args
 
 
 class SimClient:
@@ -161,7 +215,12 @@ class SimClient:
         name = tool.get("function", {}).get("name") or tool.get("name", "unknown_tool")
         if roll < profile["schema_fumble_rate"]:
             return "", [ToolCall(id="sim_call_1", name=name, arguments="{not valid json")], "tool_calls"
-        return "", [ToolCall(id="sim_call_1", name=name, arguments="{}")], "tool_calls"
+        last_user = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
+        if name == "create_custom_order":
+            args = _extract_custom_order_args(last_user, miss=roll < profile["miss_rate"])
+        else:
+            args = {}
+        return "", [ToolCall(id="sim_call_1", name=name, arguments=json.dumps(args, ensure_ascii=False))], "tool_calls"
 
     def _simulate_latency(self, out_tokens: int, profile: dict) -> None:
         if not self._real_sleep:

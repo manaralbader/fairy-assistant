@@ -20,13 +20,13 @@ lands — a box only gets checked once the evidence for it exists in this repo
 
 ## 2 · Structured outputs and function calling — 15 pts
 
-- [ ] One validated request object (commission / status query / appointment), extracted via validate → retry → repair
-- [ ] Pass rates measured and split by language (ar / en)
-- [ ] At least 3 tools spanning risk classes: read-only, side-effecting + auth-gated, terminal
-- [ ] Authorization lives in `session.authorize()`, never in the prompt text
-- [ ] A bounded tool loop
-- [ ] Negative tool-safety cases as green `assert` cells
-- [ ] Every tool call logged with risk class + loop iteration
+- [x] One validated request object (commission / status query / appointment), extracted via validate → retry → repair — `CreateCustomOrderArgs` (`tools/schemas.py`), the repair path is the bounded loop feeding a validation error back as a tool result (`tools/loop.py`)
+- [x] Pass rates measured and split by language (ar / en) — `scripts/measure_tool_extraction.py`, real, rerunnable: commercial tier 89%/89% (en/ar), open-weight 56%→89% / 78%→89% (first attempt → after repair); the one case per language that never passes is the deliberate over-300-char over-specification test, proving that guard is a hard limit, not a hint
+- [x] At least 3 tools spanning risk classes: read-only, side-effecting + auth-gated, terminal — 4 tools in `tools/registry.py`: `check_order_status` (read-only), `create_custom_order` + `book_pickup_appointment` (side-effecting, auth-gated), `escalate_to_human` (terminal)
+- [x] Authorization lives in `session.authorize()`, never in the prompt text — `tools/session.py`; `tests/test_tools.py::test_side_effecting_tool_blocked_without_an_authorized_session_even_with_valid_arguments` proves *valid* arguments still get rejected without a verified session
+- [x] A bounded tool loop — `tools/loop.py::run_tool_loop`; `test_bounded_loop_stops_a_model_that_never_gives_up` proves it stops a model that keeps calling the same tool forever
+- [~] Negative tool-safety cases as green `assert` cells — 7 negative/edge cases pass locally in `tests/test_tools.py`; porting them into notebook `assert` cells is pending until the notebook exists
+- [x] Every tool call logged with risk class + loop iteration — every `run_tool_loop` call returns `.log`, asserted directly in tests
 
 ## 3 · Prompt pipeline and guardrails — 15 pts
 
