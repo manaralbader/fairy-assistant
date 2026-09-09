@@ -1,0 +1,126 @@
+"""Router-first: exactly one of three shapes runs per customer turn — a
+single-call FAQ answer, a bounded tool workflow, or a direct escalation to a
+human. The guard wall wraps both ends: an attack never reaches a model call
+(stages 1-2 run first), and every response is checked for a leaked canary or
+an invented figure before a customer ever sees it (stages 3-4, always last).
+
+Route selection here is a fixed, bilingual keyword lookup — deliberately
+simple and fully deterministic, which is what makes the golden set's routing
+expectations testable with a plain assert instead of a judge.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from fairy.domain.catalogue import facts_dict, to_fact_lines
+from fairy.guardrails.normalize import detect_language
+from fairy.guardrails.pipeline import check_input, check_output
+from fairy.llm.interfaces import LLMClient, LLMRequest, Message
+from fairy.prompts.registry import load_prompt
+from fairy.tools.loop import run_tool_loop
+from fairy.tools.registry import TOOLS
+from fairy.tools.session import Session
+from fairy.tools.store import OrderStore
+
+_ESCALATION_KEYWORDS = [
+    "broke", "broken", "defect", "snapped", "fell apart", "refund",
+    "speak to someone", "speak to a person", "human",
+    "انكسر", "تكسر", "عيب", "استرداد", "موظف", "شخص حقيقي",
+]
+_ORDER_STATUS_KEYWORDS = [
+    "status", "where is my order", "track my order", "ready yet", "when will my order",
+    "حالة الطلب", "وين طلبي", "متابعة طلبي", "طلبي جاهز",
+]
+_APPOINTMENT_KEYWORDS = [
+    "pickup", "pick up", "appointment", "book a", "collect my",
+    "استلام", "موعد", "احجز", "أحجز",
+]
+_NEW_ORDER_KEYWORDS = [
+    "custom order", "commission", "new order", "want a bracelet", "want a necklace",
+    "want a set", "want earrings",
+    "أطلب", "اطلب", "سوار", "قلادة", "أقراط", "اقراط", "طقم", "أبغى", "ابغى",
+]
+
+
+def _any_keyword(text: str, keywords: list[str]) -> bool:
+    lowered = text.lower()
+    return any(keyword.lower() in lowered for keyword in keywords)
+
+
+@dataclass
+class RouterResult:
+    route: str  # "blocked" | "faq" | "service_workflow" | "escalation"
+    final_text: str
+    guard_stages: list = field(default_factory=list)
+    tool_log: list = field(default_factory=list)
+
+
+def _run_single_tool_workflow(
+    tool_name: str,
+    user_text: str,
+    *,
+    client: LLMClient,
+    session: Session,
+    store: OrderStore,
+) -> tuple[str, list]:
+    result = run_tool_loop(
+        client,
+        [Message(role="user", content=user_text)],
+        session=session,
+        store=store,
+        tools=[TOOLS[tool_name].json_schema],
+        max_iterations=2,
+    )
+    return result.final_text or "", result.log
+
+
+def handle_turn(
+    user_text: str,
+    *,
+    client: LLMClient,
+    session: Session,
+    store: OrderStore,
+    max_tokens: int = 300,
+) -> RouterResult:
+    blocked = check_input(user_text)
+    if blocked is not None:
+        return RouterResult(route="blocked", final_text=blocked.output_text, guard_stages=blocked.stages)
+
+    language = detect_language(user_text)
+
+    if _any_keyword(user_text, _ESCALATION_KEYWORDS):
+        raw_text, tool_log = _run_single_tool_workflow(
+            "escalate_to_human", user_text, client=client, session=session, store=store
+        )
+        route = "escalation"
+    elif _any_keyword(user_text, _ORDER_STATUS_KEYWORDS):
+        raw_text, tool_log = _run_single_tool_workflow(
+            "check_order_status", user_text, client=client, session=session, store=store
+        )
+        route = "service_workflow"
+    elif _any_keyword(user_text, _APPOINTMENT_KEYWORDS):
+        raw_text, tool_log = _run_single_tool_workflow(
+            "book_pickup_appointment", user_text, client=client, session=session, store=store
+        )
+        route = "service_workflow"
+    elif _any_keyword(user_text, _NEW_ORDER_KEYWORDS):
+        raw_text, tool_log = _run_single_tool_workflow(
+            "create_custom_order", user_text, client=client, session=session, store=store
+        )
+        route = "service_workflow"
+    else:
+        system_prompt = load_prompt("answer_faq.v1").render(service_directory=to_fact_lines())
+        response = client.complete(
+            LLMRequest(
+                messages=[
+                    Message(role="system", content=system_prompt),
+                    Message(role="user", content=user_text),
+                ],
+                max_tokens=max_tokens,
+            )
+        )
+        raw_text, tool_log, route = response.text or "", [], "faq"
+
+    guarded = check_output(raw_text, facts=facts_dict(), language=language)
+    return RouterResult(route=route, final_text=guarded.output_text, guard_stages=guarded.stages, tool_log=tool_log)

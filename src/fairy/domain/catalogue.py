@@ -55,14 +55,22 @@ MAX_INSPIRATION_NOTE_CHARS = 300
 ORDER_STATUSES = ["pending_confirmation", "in_progress", "ready_for_pickup", "picked_up"]
 
 
+def facts_dict() -> dict[str, str]:
+    """The single source both the simulator's grounding (via FACT: lines in
+    the rendered prompt) and the output-side groundedness guard (via this
+    dict directly) read from — one place a figure can be wrong."""
+    facts = {
+        "materials offered": ", ".join(MATERIALS),
+        "color palette": ", ".join(COLOR_PALETTE),
+        "turnaround time": TURNAROUND_DAYS,
+        "defect and refund policy": DEFECT_POLICY,
+        "pickup location": PICKUP_LOCATION,
+        "pickup hours": PICKUP_HOURS,
+    }
+    for tier, desc in BUDGET_TIERS.items():
+        facts[f"price for a {tier} piece"] = desc
+    return facts
+
+
 def to_fact_lines() -> str:
-    lines = [
-        f"FACT: materials offered = {', '.join(MATERIALS)}",
-        f"FACT: color palette = {', '.join(COLOR_PALETTE)}",
-        *[f"FACT: price for a {tier} piece = {desc}" for tier, desc in BUDGET_TIERS.items()],
-        f"FACT: turnaround time = {TURNAROUND_DAYS}",
-        f"FACT: defect and refund policy = {DEFECT_POLICY}",
-        f"FACT: pickup location = {PICKUP_LOCATION}",
-        f"FACT: pickup hours = {PICKUP_HOURS}",
-    ]
-    return "\n".join(lines)
+    return "\n".join(f"FACT: {key} = {value}" for key, value in facts_dict().items())

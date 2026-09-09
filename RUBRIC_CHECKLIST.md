@@ -11,8 +11,8 @@ lands — a box only gets checked once the evidence for it exists in this repo
 
 ## 1 · Architecture and the model boundary — 15 pts
 
-- [ ] Router-first design: FAQ single-call, service workflow with tools, escalation to a human
-- [~] Every model call goes through one `LLMClient` boundary — the contract (`interfaces.py`) and two implementations (`sim.py`, `openai_compat.py`) exist; nothing calls it yet because the router doesn't exist
+- [x] Router-first design: FAQ single-call, service workflow with tools, escalation to a human — `fairy/router.py::handle_turn`; 8 passing end-to-end tests in `tests/test_router.py`, one per path (faq / order_status / appointment / new_order / escalation / blocked / canary-leak-caught)
+- [x] Every model call goes through one `LLMClient` boundary — `router.handle_turn` is now the single place `client.complete()` is called (directly for FAQ, via `run_tool_loop` for workflows); nothing bypasses it
 - [~] `assert` cell in the notebook proving no provider SDK import exists outside one adapter section — proven locally as `tests/test_architecture.py::test_no_provider_sdk_outside_the_adapter`; porting it into a notebook cell is pending until the notebook exists
 - [~] Two live backends (one commercial, one open-weight), switchable by config only — **by design decision (ADR 002), the default and graded run uses a rule-based simulator with two distinct tiers, not real network calls** (no cost, no key, reproducible). The real adapter (`openai_compat.py`) is fully implemented and unit-tested against a mocked HTTP layer, and `config.py` proves route selection is env-var-only (`tests/test_config.py`) — so the *architecture* claim is proven; it is not claiming two real providers were exercised live
 - [~] A scripted fault (rate-limit + outage) with the fallback transcript captured as notebook output — the retry/fallback mechanism (`resilient.py`) is built and unit-tested (3 passing cases: retry-then-recover, retry-then-fallback, no-fallback-raises); capturing the transcript as notebook output is pending

@@ -105,6 +105,63 @@ def _extract_custom_order_args(text: str, *, miss: bool) -> dict:
     return args
 
 
+ORDER_ID_PATTERN = re.compile(r"FC-\d{4,}", re.IGNORECASE)
+DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+TIME_SLOT_PATTERN = re.compile(r"\d{1,2}:\d{2}-\d{1,2}:\d{2}")
+PHONE4_PATTERN = re.compile(r"\b(\d{4})\b")
+
+REASON_KEYWORDS = {
+    "defect_refund": [
+        "broke", "broken", "defect", "snapped", "fell apart", "refund",
+        "انكسر", "تكسر", "عيب", "استرداد",
+    ],
+    "over_specification_insisted": [
+        "bead by bead", "stitch by stitch", "exactly", "precisely",
+        "حبة حبة", "غرزة غرزة", "بالضبط", "بالتحديد",
+    ],
+}
+
+
+def _extract_check_order_status_args(text: str, *, miss: bool) -> dict:
+    args: dict = {}
+    order_id_match = ORDER_ID_PATTERN.search(text)
+    remainder = text
+    if order_id_match:
+        args["order_id"] = order_id_match.group(0).upper()
+        remainder = text[: order_id_match.start()] + text[order_id_match.end() :]
+    phone_match = PHONE4_PATTERN.search(remainder)
+    if phone_match and not miss:
+        args["phone_last4"] = phone_match.group(1)
+    return args
+
+
+def _extract_book_pickup_args(text: str, *, miss: bool) -> dict:
+    args: dict = {}
+    order_id_match = ORDER_ID_PATTERN.search(text)
+    date_match = DATE_PATTERN.search(text)
+    time_match = TIME_SLOT_PATTERN.search(text)
+    if order_id_match:
+        args["order_id"] = order_id_match.group(0).upper()
+    if date_match:
+        args["date"] = date_match.group(0)
+    if time_match and not miss:
+        args["time_slot"] = time_match.group(0)
+    return args
+
+
+def _extract_escalate_args(text: str, *, miss: bool) -> dict:
+    lowered = text.lower()
+    reason = "other"
+    for candidate, keywords in REASON_KEYWORDS.items():
+        if any(keyword in lowered or keyword in text for keyword in keywords):
+            reason = candidate
+            break
+    args: dict = {"reason": reason, "details": text.strip()[:1000] or "no details given"}
+    if miss:
+        args.pop("reason")
+    return args
+
+
 class SimClient:
     def __init__(
         self,
@@ -216,8 +273,15 @@ class SimClient:
         if roll < profile["schema_fumble_rate"]:
             return "", [ToolCall(id="sim_call_1", name=name, arguments="{not valid json")], "tool_calls"
         last_user = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
+        miss = roll < profile["miss_rate"]
         if name == "create_custom_order":
-            args = _extract_custom_order_args(last_user, miss=roll < profile["miss_rate"])
+            args = _extract_custom_order_args(last_user, miss=miss)
+        elif name == "check_order_status":
+            args = _extract_check_order_status_args(last_user, miss=miss)
+        elif name == "book_pickup_appointment":
+            args = _extract_book_pickup_args(last_user, miss=miss)
+        elif name == "escalate_to_human":
+            args = _extract_escalate_args(last_user, miss=miss)
         else:
             args = {}
         return "", [ToolCall(id="sim_call_1", name=name, arguments=json.dumps(args, ensure_ascii=False))], "tool_calls"
